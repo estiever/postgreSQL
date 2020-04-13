@@ -1,0 +1,122 @@
+CREATE TABLE dim_customer (
+	customer_id bpchar NOT NULL,
+    company_name character varying(40) NOT NULL,
+    contact_name character varying(30),
+    contact_title character varying(30),
+	region character varying(15),
+    postal_code character varying(10),
+	city character varying(15),
+    country character varying(15)
+);
+ALTER TABLE ONLY dim_customer
+	ADD CONSTRAINT pk_dim_customer PRIMARY KEY (customer_id);
+	
+CREATE TABLE dim_employee (
+	employee_id smallint NOT NULL,
+    last_name character varying(20) NOT NULL,
+    first_name character varying(10) NOT NULL,
+    hire_date date,
+	title character varying(30),
+    reports_to smallint,
+    region character varying(15),
+    city character varying(15),
+    country character varying(15)
+);
+ALTER TABLE ONLY dim_employee
+    ADD CONSTRAINT pk_dim_employee PRIMARY KEY (employee_id);
+
+CREATE TABLE dim_product (
+    product_id smallint NOT NULL,
+    product_name character varying(40) NOT NULL,
+    category_name character varying(15) NOT NULL,
+    supplier_id smallint,
+    category_id smallint,
+    description text,
+    quantity_per_unit character varying(20),
+    reorder_level smallint,
+    discontinued integer NOT NULL
+);
+ALTER TABLE ONLY dim_product
+    ADD CONSTRAINT pk_dim_product PRIMARY KEY (product_id);
+
+CREATE TABLE dim_time (
+   date_id serial PRIMARY KEY,
+   date_ DATE NOT NULL,
+   day_of_year INT NOT NULL, 
+   month_num INT NOT NULL,
+   quarter_num INT NOT NULL,
+   year_ INT NOT NULL
+);
+
+CREATE TABLE fact_sales (
+    order_id smallint NOT NULL PRIMARY KEY,
+    customer_id bpchar NOT NULL REFERENCES dim_customer,
+    employee_id smallint NOT NULL REFERENCES dim_employee,
+    product_id smallint NOT NULL REFERENCES dim_product,
+    date_id serial NOT NULL REFERENCES dim_time,
+    order_date date,
+    required_date date,
+    shipped_date date,
+    unit_price real NOT NULL,
+    units_in_stock smallint,
+    units_on_order smallint,
+    quantity smallint NOT NULL,
+    discount real NOT NULL,
+    extended_price real NOT NULL
+);
+
+    
+
+
+INSERT INTO dim_customer
+SELECT customer_id, company_name, contact_name, contact_title, region, postal_code, city, country
+FROM customers;
+
+INSERT INTO dim_employee
+SELECT employee_id, last_name, first_name, hire_date, title, reports_to, region, city, country
+FROM employees;
+
+INSERT INTO dim_product
+SELECT product_id, product_name, category_name, supplier_id, products.category_id, description, quantity_per_unit, reorder_level, discontinued
+FROM products
+INNER JOIN categories ON categories.category_id = products.category_id;
+
+INSERT INTO dim_time (date_, day_of_year, month_num, quarter_num, year_)
+SELECT
+   order_date as date_,
+   EXTRACT (DOY FROM order_date) AS day_of_year,
+   EXTRACT (MONTH FROM order_date) AS month_num,
+   EXTRACT (QUARTER FROM order_date) AS quarter_num,
+   EXTRACT (YEAR FROM order_date) AS year_
+FROM
+   orders;
+
+INSERT INTO fact_sales(order_id, customer_id, employee_id, product_id, date_id, order_date, required_date,
+			shipped_date, unit_price, units_in_stock, units_on_order, quantity, discount, 
+            extended_price)
+SELECT 
+	orders.order_id,
+	orders.customer_id,
+	orders.employee_id,
+	products.product_id,
+	dim_time.date_id,
+	orders.order_date,
+	orders.required_date,
+    orders.shipped_date,
+    order_details.unit_price,
+    products.units_in_stock,
+    products.units_on_order,
+    order_details.quantity,
+    order_details.discount,
+	(order_details.quantity*order_details.unit_price) * (1 - order_details.discount) AS extended_price
+    
+FROM orders
+
+JOIN order_details ON order_details.order_id = orders.order_id 
+JOIN products ON products.product_id = order_details.product_id
+JOIN dim_time ON dim_time.date_ = orders.order_date;
+
+
+
+
+
